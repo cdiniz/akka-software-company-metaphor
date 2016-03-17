@@ -2,7 +2,7 @@ name := "akka-software-company-metaphor"
 
 version := "0.0.1"
 
-scalaVersion := "2.11.6"
+scalaVersion := "2.11.7"
 
 lazy val akkaVersion = "2.4.0"
 
