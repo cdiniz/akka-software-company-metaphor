@@ -9,10 +9,10 @@ case class Task(id : Int, title : String, description : String, timeEstimate : I
 case class Project(title : String, backlog : Seq[Task])
 case class TaskDone(id : Int, timeSpent : Int)
 case class ProjectDone(timeSpent : Int)
+sealed trait LeaderResponse
+case object ImOnIt extends LeaderResponse
+case object ImBusy extends LeaderResponse
 case class ImSickException(msg: String, currentTask : Int, partialTimeSpent : Int) extends Exception(msg)
-case object ImOnIt
-case object ImBusy
-
 
 class SoftwareEngineer extends Actor with ActorLogging{
   var tasksDone = 0
@@ -98,14 +98,14 @@ object HelloAkkaScala extends App {
   board.send(leader, project)
 
 board.receive(5.second) match {
-    case ImOnIt => println("Please keep the time ")
-    case ImBusy => println("should be joking with me")
+    case ImOnIt => println("Keep it on track!")
+    case ImBusy => println("You should be joking with me")
   }
 
   board.receive(30.second) match {
     case ProjectDone(timeSpent) => 
     if (timeSpent > project.backlog.map(_.timeEstimate).sum)
-      println("These software engineers spent all days at reddit for sure!")
+      println("These software engineers spent all days on reddit for sure!")
     else  
       println("Nicely done!")
     system.terminate()
