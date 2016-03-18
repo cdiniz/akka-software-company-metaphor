@@ -20,7 +20,7 @@ class SoftwareEngineer extends Actor with ActorLogging{
     case Task(id,title,desc,timeEstimate) =>
       if (scala.util.Random.nextInt(31) == 1)
         throw new ImSickException("WITH THE FLU", id, scala.util.Random.nextInt(500))
-      tasksDone = tasksDone + 1
+      tasksDone += 1
       context.parent ! TaskDone(id,timeEstimate + scala.util.Random.nextInt(timeEstimate))
   }
 }
@@ -53,11 +53,10 @@ class TeamLeader(teamSize : Int) extends Actor with ActorLogging {
   def managing : Receive = {
     case TaskDone(id,timeSpent) =>
       log.debug(s"Task Done $id")
-      tasksDone = tasksDone :+ id
-      projectTime = projectTime + timeSpent
+      tasksDone :+= id
+      projectTime += timeSpent
       if (tasksDone.length == project.fold(0)(_.backlog.length)){
-        log.debug(s"Project ${project.fold("Unknown")(_.title)} done!")
-        log.debug(s"Project Time Estimate: ${project.fold(0)(p => p.backlog.map(_.timeEstimate).sum)}, Real Spent Time: $projectTime")
+        log.debug(s"Project ${project.fold("Unknown")(_.title)} done!\nTime Estimate: ${project.fold(0)(p => p.backlog.map(_.timeEstimate).sum)}, Real Spent Time: $projectTime")
         reportTo.get ! ProjectDone(projectTime)
         project = None
         tasksDone = Seq()
@@ -71,8 +70,8 @@ class TeamLeader(teamSize : Int) extends Actor with ActorLogging {
 
   val decider: PartialFunction[Throwable, Directive] = {
     case ImSickException(msg,task,partialTimeSpent) =>
-      projectTime = projectTime + partialTimeSpent
-      router.route(project.get.backlog.find(_.id == task).get, sender())
+      projectTime += partialTimeSpent
+      project.get.backlog.find(_.id == task).map(router.route(_, sender()))
       Resume //Instead of restart
   }
   override def supervisorStrategy: SupervisorStrategy =
@@ -80,7 +79,7 @@ class TeamLeader(teamSize : Int) extends Actor with ActorLogging {
 
 }
 
-object HelloAkkaScala extends App {
+object SoftwareCompany extends App {
 
   // Create the 'Software Company'
   val system = ActorSystem("SoftwareCompany")
@@ -91,17 +90,19 @@ object HelloAkkaScala extends App {
   // Create the board inbox
   val board = Inbox.create(system)
 
-  //Create sample projects
+  //Create sample project
   val project = Project("simple project 1",Seq(Task(1,"1","1",100),Task(2,"2","2",1440),Task(3,"3","3",1330),Task(4,"4","4",1100),Task(5,"5","5",700)))
 
   //send a project to a leader
   board.send(leader, project)
 
-board.receive(5.second) match {
+  //waiting for feedback
+  board.receive(5.second) match {
     case ImOnIt => println("Keep it on track!")
     case ImBusy => println("You should be joking with me")
   }
 
+  //waiting for the project finish
   board.receive(30.second) match {
     case ProjectDone(timeSpent) => 
     if (timeSpent > project.backlog.map(_.timeEstimate).sum)
