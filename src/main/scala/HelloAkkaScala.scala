@@ -4,6 +4,7 @@ import scala.collection.mutable
 import scala.concurrent.{Await, Future, ExecutionContext}
 import scala.concurrent.duration._
 import akka.routing.{ ActorRefRoutee, RoundRobinRoutingLogic, Router }
+import scala.util.Random
 
 case class Task(id : Int, title : String, description : String, timeEstimate : Int)
 case class Project(title : String, backlog : Seq[Task])
@@ -12,16 +13,16 @@ case class ProjectDone(timeSpent : Int)
 sealed trait LeaderResponse
 case object ImOnIt extends LeaderResponse
 case object ImBusy extends LeaderResponse
-case class ImSickException(msg: String, currentTask : Int, partialTimeSpent : Int) extends Exception(msg)
+case class UnfinishedTaskException(msg: String, currentTask : Int, partialTimeSpent : Int) extends Exception(msg)
 
 class SoftwareEngineer extends Actor with ActorLogging{
   var tasksDone = 0
   def receive = {
     case Task(id,title,desc,timeEstimate) =>
       if (scala.util.Random.nextInt(31) == 1)
-        throw new ImSickException("WITH THE FLU", id, scala.util.Random.nextInt(500))
+        throw new UnfinishedTaskException("I got the flu!", id, Random.nextInt(timeEstimate))
       tasksDone += 1
-      context.parent ! TaskDone(id,timeEstimate + scala.util.Random.nextInt(timeEstimate))
+      context.parent ! TaskDone(id,timeEstimate + Random.nextInt(timeEstimate))
   }
 }
 
@@ -56,8 +57,10 @@ class TeamLeader(teamSize : Int) extends Actor with ActorLogging {
       tasksDone :+= id
       projectTime += timeSpent
       if (tasksDone.length == project.fold(0)(_.backlog.length)){
-        log.debug(s"Project ${project.fold("Unknown")(_.title)} done!\nTime Estimate: ${project.fold(0)(p => p.backlog.map(_.timeEstimate).sum)}, Real Spent Time: $projectTime")
-        reportTo.get ! ProjectDone(projectTime)
+        log.debug(s"Project ${project.fold("Unknown")(_.title)} done!")
+        log.debug(s"Time Estimate: ${project.fold(0)(p => p.backlog.map(_.timeEstimate).sum)}")
+        log.debug(s"Real Spent Time: $projectTime")
+        reportTo.foreach( _ ! ProjectDone(projectTime))
         project = None
         tasksDone = Seq()
         projectTime = 0
@@ -69,7 +72,7 @@ class TeamLeader(teamSize : Int) extends Actor with ActorLogging {
   }
 
   val decider: PartialFunction[Throwable, Directive] = {
-    case ImSickException(msg,task,partialTimeSpent) =>
+    case UnfinishedTaskException(msg,task,partialTimeSpent) =>
       projectTime += partialTimeSpent
       project.get.backlog.find(_.id == task).map(router.route(_, sender()))
       Resume //Instead of restart
@@ -99,14 +102,14 @@ object SoftwareCompany extends App {
   //waiting for feedback
   board.receive(5.second) match {
     case ImOnIt => println("Keep it on track!")
-    case ImBusy => println("You should be joking with me")
+    case ImBusy => println("You must be joking with me")
   }
 
   //waiting for the project finish
   board.receive(30.second) match {
     case ProjectDone(timeSpent) => 
     if (timeSpent > project.backlog.map(_.timeEstimate).sum)
-      println("These software engineers spent all days on reddit for sure!")
+      println("These software engineers spent all day on reddit for sure!")
     else  
       println("Nicely done!")
     system.terminate()
